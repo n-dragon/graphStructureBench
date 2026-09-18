@@ -1,29 +1,34 @@
 #!/usr/bin/env bash
-# Campagne de mesure reproductible. Trois campagnes séparées, parce qu'un BFS
-# complet et un test d'arête ne se mesurent pas avec les mêmes volumes de
-# requêtes : sur chacune, le produit cartésien sommets × requêtes × threads est
-# balayé en entier.
+# Campagne de mesure reproductible.
+#
+# Quatre campagnes, parce qu'un BFS complet et un test d'arête ne se mesurent
+# pas avec les mêmes volumes de requêtes ni aux mêmes tailles de graphe. Sur
+# chacune, le produit cartésien sommets × requêtes concurrentes × threads est
+# balayé en entier, sur les trois topologies.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 OUT=${OUT:-results}
 THREADS=${THREADS:-1,2,4}
+KINDS=${KINDS:-er,rmat,grid}
 mkdir -p "$OUT"
 go build -o "$OUT/gsbench" ./cmd/gsbench
 
-echo "== campagne 1/3 : petits graphes, toutes structures (matrice dense comprise)"
-"$OUT/gsbench" -kinds er,rmat,grid -nodes 20000 -threads "$THREADS" \
-  -workloads bfs,neighbors,hasedge -queries 64,512 \
-  -csv "$OUT/small.csv" -md "$OUT/small.md" > "$OUT/small.txt"
+run() { # run <nom> <arguments...>
+  local name=$1; shift
+  echo "== $name"
+  "$OUT/gsbench" -kinds "$KINDS" -threads "$THREADS" "$@" \
+    -csv "$OUT/$name.csv" -md "$OUT/$name.md" > "$OUT/$name.txt"
+}
 
-echo "== campagne 2/3 : parcours complets à l'échelle"
-"$OUT/gsbench" -kinds er,rmat,grid -nodes 200000,1000000 -threads "$THREADS" \
-  -workloads bfs -queries 4,16 \
-  -csv "$OUT/traversal.csv" -md "$OUT/traversal.md" > "$OUT/traversal.txt"
+# Petits graphes : seule échelle où la matrice d'adjacence dense tient en
+# mémoire, donc la seule où l'on dispose de la borne basse en latence.
+run small-traversal -nodes 20000 -workloads bfs,dfs   -queries 64,512
+run small-queries   -nodes 20000 -workloads neighbors,hasedge -queries 10000,500000
 
-echo "== campagne 3/3 : requêtes ponctuelles à haut débit"
-"$OUT/gsbench" -kinds er,rmat,grid -nodes 200000,1000000 -threads "$THREADS" \
-  -workloads neighbors,hasedge -queries 200000,2000000 \
-  -csv "$OUT/queries.csv" -md "$OUT/queries.md" > "$OUT/queries.txt"
+# Grande échelle : le graphe ne tient plus dans le cache, la localité mémoire
+# de la structure devient le facteur dominant.
+run large-traversal -nodes 200000,1000000 -workloads bfs -queries 4,16
+run large-queries   -nodes 200000,1000000 -workloads neighbors,hasedge -queries 200000,2000000
 
 echo "résultats dans $OUT/"
