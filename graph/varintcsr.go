@@ -8,6 +8,9 @@ import "encoding/binary"
 // localité) la plupart des voisins tiennent sur 1 ou 2 octets au lieu de 4.
 // Le décodage coûte du CPU mais divise le volume lu en mémoire : sur les
 // charges limitées par la bande passante, le compromis peut être gagnant.
+//
+// Les bornes sont des uint32 : la limite est de 4 Gio de données encodées,
+// soit de l'ordre du milliard d'arêtes.
 type VarintCSR struct {
 	offsets []uint32 // n+1 bornes dans data
 	data    []byte
