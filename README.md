@@ -16,6 +16,10 @@ Le tout est croisé avec trois topologies de graphe (uniforme, loi de puissance,
 grille) et quatre charges de travail (BFS, DFS, lecture d'adjacence, test
 d'existence d'arête).
 
+**Documents** : [SPEC.md](SPEC.md) — ce que le banc mesure et comment ·
+[DECISIONS.md](DECISIONS.md) — journal des décisions de conception ·
+`RESULTS.md` — rapport de la campagne retenue.
+
 ## Démarrage
 
 ```bash
