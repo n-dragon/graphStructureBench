@@ -33,6 +33,10 @@ func (g *SortedEdgeList) NumVertices() int { return g.n }
 func (g *SortedEdgeList) NumEdges() int    { return len(g.keys) }
 
 // lowerBound renvoie l'indice de la première arête de source u.
+//
+// La borne haute, elle, n'est jamais calculée : comparer la source extraite de
+// la clé (k>>32) évite un (u+1)<<32 qui déborde sur le dernier sommet
+// représentable.
 func (g *SortedEdgeList) lowerBound(u uint32) int {
 	target := uint64(u) << 32
 	return sort.Search(len(g.keys), func(i int) bool { return g.keys[i] >= target })
@@ -40,19 +44,17 @@ func (g *SortedEdgeList) lowerBound(u uint32) int {
 
 func (g *SortedEdgeList) Degree(u uint32) int {
 	lo := g.lowerBound(u)
-	limit := uint64(u+1) << 32
 	hi := lo
-	for hi < len(g.keys) && g.keys[hi] < limit {
+	for hi < len(g.keys) && g.keys[hi]>>32 == uint64(u) {
 		hi++
 	}
 	return hi - lo
 }
 
 func (g *SortedEdgeList) ForEachNeighbor(u uint32, fn func(uint32) bool) {
-	limit := uint64(u+1) << 32
 	for i := g.lowerBound(u); i < len(g.keys); i++ {
 		k := g.keys[i]
-		if k >= limit {
+		if k>>32 != uint64(u) {
 			return
 		}
 		if !fn(uint32(k)) {
@@ -62,10 +64,9 @@ func (g *SortedEdgeList) ForEachNeighbor(u uint32, fn func(uint32) bool) {
 }
 
 func (g *SortedEdgeList) AppendNeighbors(dst []uint32, u uint32) []uint32 {
-	limit := uint64(u+1) << 32
 	for i := g.lowerBound(u); i < len(g.keys); i++ {
 		k := g.keys[i]
-		if k >= limit {
+		if k>>32 != uint64(u) {
 			break
 		}
 		dst = append(dst, uint32(k))

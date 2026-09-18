@@ -283,6 +283,29 @@ disposition des données.
 
 ---
 
+## 17. Liste d'arêtes dédupliquée en précondition, pas en tolérance
+
+*2026-09-18 — proposé, mis au jour par les tests*
+
+**Contexte.** En écrivant les tests par structure, une divergence est apparue
+sur une liste comportant des doublons : un CSR conserve les deux exemplaires,
+une représentation par bitmap les fusionne. `NumEdges` et la somme des degrés
+ne coïncident alors plus, selon la structure.
+
+**Décision.** La déduplication devient une **précondition explicite** des
+constructeurs, outillée par `graph.Dedup` (remontée du paquet `gen`, où elle
+était privée), et documentée sur `Builders`. Un test la vérifie et un autre
+documente la divergence qu'elle évite.
+
+**Alternative écartée.** Dédupliquer dans chaque constructeur : cela aurait
+ajouté un tri à chaque construction, donc faussé la mesure du temps de
+construction — un des chiffres du banc.
+
+**Conséquence.** Le contrat est net, et le coût de la déduplication est payé
+une fois, du côté de l'appelant.
+
+---
+
 ## Décisions ouvertes
 
 | sujet | état |

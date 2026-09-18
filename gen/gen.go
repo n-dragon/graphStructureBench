@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math"
 	"math/rand/v2"
-	"slices"
 
 	"github.com/n-dragon/graphstructurebench/graph"
 )
@@ -62,7 +61,7 @@ func Generate(s Spec) (Graph, error) {
 		}
 		edges = rev
 	}
-	edges = dedup(edges)
+	edges = graph.Dedup(edges)
 	return Graph{Spec: s, N: n, Edges: edges}, nil
 }
 
@@ -141,19 +140,4 @@ func grid(nWanted int) (int, []graph.Edge) {
 		}
 	}
 	return n, edges
-}
-
-// dedup trie les arêtes et supprime les doublons.
-func dedup(edges []graph.Edge) []graph.Edge {
-	keys := make([]uint64, len(edges))
-	for i, e := range edges {
-		keys[i] = uint64(e.From)<<32 | uint64(e.To)
-	}
-	slices.Sort(keys)
-	keys = slices.Compact(keys)
-	out := make([]graph.Edge, len(keys))
-	for i, k := range keys {
-		out[i] = graph.Edge{From: uint32(k >> 32), To: uint32(k)}
-	}
-	return out
 }

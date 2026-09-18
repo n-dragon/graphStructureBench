@@ -133,10 +133,38 @@ les deux modes.
 ## 7. Invariants de correction
 
 Comparer des débits n'a de sens que si les structures répondent la même chose.
+Les tests s'organisent en deux niveaux.
 
-1. `go test ./...` compare les neuf structures à une implémentation de
-   référence naïve : listes d'adjacence, degrés, `HasEdge` sur des couples
-   présents et absents, BFS et DFS.
+**Le contrat commun** (`graph/contract_test.go`), vérifié pour les neuf
+structures sur un corpus de petits graphes limites — graphe vide, boucles sur
+soi, sommets isolés aux deux bouts, étoiles entrante et sortante, graphe
+complet, hub et feuilles :
+
+- adjacences, degrés et `AppendNeighbors` comparés à une référence naïve ;
+- `HasEdge` vérifié **exhaustivement**, sur les n² couples ;
+- arrêt anticipé : un callback qui renvoie `false` doit interrompre
+  l'itération immédiatement, y compris pour les structures qui balayent des
+  bits ou décodent un flux ;
+- `AppendNeighbors` ajoute sans tronquer, pour permettre l'accumulation dans
+  un tampon commun.
+
+**Les invariants propres à chaque structure**, en boîte blanche : monotonie des
+offsets CSR, découpage à trois indices qui empêche un `append` de corrompre le
+sommet suivant, absence de marge de capacité dans `adjlist-exact`, entrées de
+map limitées aux sommets émetteurs, bornes de recherche de la liste d'arêtes
+(y compris sur le dernier sommet représentable), aller-retour d'encodage varint
+sur des écarts multi-octets, règle de promotion des hubs et invariant « un
+bitmap ne coûte jamais plus que les cibles qu'il remplace », frontières de mots
+et refus des tailles démesurées pour la matrice dense. Chaque formule
+`MemoryBytes()` est vérifiée contre son expression attendue.
+
+Enfin, la réutilisation des tampons entre requêtes (`traverse`) est testée à
+part : un `reset` incomplet ne planterait pas, il fausserait silencieusement
+toutes les mesures.
+
+1. `go test ./...` compare aussi les neuf structures à une implémentation de
+   référence naïve sur des graphes engendrés : listes d'adjacence, degrés,
+   `HasEdge` sur des couples présents et absents, BFS et DFS.
 2. Pendant le banc, chaque résultat porte une **somme de contrôle commutative**
    (somme des identifiants visités, insensible à l'ordonnancement des threads).
    Toute divergence entre structures est signalée sur la sortie d'erreur.

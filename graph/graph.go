@@ -3,11 +3,34 @@
 // ce qui permet de les comparer sur les mêmes charges de travail.
 package graph
 
-import "fmt"
+import (
+	"fmt"
+	"slices"
+)
 
 // Edge est une arête orientée.
 type Edge struct {
 	From, To uint32
+}
+
+// Dedup trie les arêtes et supprime les doublons.
+//
+// C'est une précondition des constructeurs : sur une liste comportant des
+// doublons, les structures ne se comportent pas toutes pareil — un CSR
+// conserve les deux exemplaires, une représentation par bitmap les fusionne.
+// Les identifiants doivent par ailleurs être strictement inférieurs à n.
+func Dedup(edges []Edge) []Edge {
+	keys := make([]uint64, len(edges))
+	for i, e := range edges {
+		keys[i] = uint64(e.From)<<32 | uint64(e.To)
+	}
+	slices.Sort(keys)
+	keys = slices.Compact(keys)
+	out := make([]Edge, len(keys))
+	for i, k := range keys {
+		out[i] = Edge{From: uint32(k >> 32), To: uint32(k)}
+	}
+	return out
 }
 
 // Graph est le contrat commun à toutes les structures d'index.
@@ -57,6 +80,8 @@ type Builder struct {
 }
 
 // Builders liste les structures dans l'ordre d'affichage des rapports.
+// Tous les constructeurs attendent une liste d'arêtes dédupliquée (voir
+// Dedup) dont les identifiants sont strictement inférieurs à n.
 var Builders = []Builder{
 	{Name: "adjmap", Desc: "map[uint32][]uint32 (le réflexe idiomatique)", Build: func(n int, e []Edge) (Graph, error) { return NewAdjMap(n, e), nil }},
 	{Name: "adjlist", Desc: "[][]uint32 construit par append (capacités en excès)", Build: func(n int, e []Edge) (Graph, error) { return NewAdjListAppend(n, e), nil }},
