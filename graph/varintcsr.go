@@ -74,6 +74,24 @@ func (g *VarintCSR) ForEachNeighbor(u uint32, fn func(uint32) bool) {
 	}
 }
 
+func (g *VarintCSR) AppendNeighbors(dst []uint32, u uint32) []uint32 {
+	block := g.data[g.offsets[u]:g.offsets[u+1]]
+	deg, k := binary.Uvarint(block)
+	block = block[k:]
+	var cur uint32
+	for i := uint64(0); i < deg; i++ {
+		d, k := binary.Uvarint(block)
+		block = block[k:]
+		if i == 0 {
+			cur = uint32(d)
+		} else {
+			cur += uint32(d)
+		}
+		dst = append(dst, cur)
+	}
+	return dst
+}
+
 func (g *VarintCSR) HasEdge(u, v uint32) bool {
 	block := g.data[g.offsets[u]:g.offsets[u+1]]
 	deg, k := binary.Uvarint(block)

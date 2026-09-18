@@ -21,6 +21,15 @@ type Graph interface {
 	NumEdges() int
 	Degree(u uint32) int
 	ForEachNeighbor(u uint32, fn func(v uint32) bool)
+
+	// AppendNeighbors écrit les voisins de u à la suite de dst et renvoie la
+	// tranche étendue ; l'appelant passe dst[:0] pour réutiliser son tampon.
+	//
+	// C'est la seconde façon de lire l'adjacence : au lieu d'un appel
+	// indirect par voisin, la structure remplit un bloc que l'appelant
+	// parcourt ensuite en boucle serrée. Un CSR y répond par un memmove.
+	AppendNeighbors(dst []uint32, u uint32) []uint32
+
 	HasEdge(u, v uint32) bool
 
 	// MemoryBytes est le coût mémoire analytique de la structure (somme des

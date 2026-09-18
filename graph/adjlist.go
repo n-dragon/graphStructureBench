@@ -66,6 +66,10 @@ func (g *AdjList) ForEachNeighbor(u uint32, fn func(uint32) bool) {
 	}
 }
 
+func (g *AdjList) AppendNeighbors(dst []uint32, u uint32) []uint32 {
+	return append(dst, g.adj[u]...)
+}
+
 func (g *AdjList) HasEdge(u, v uint32) bool {
 	_, ok := slices.BinarySearch(g.adj[u], v)
 	return ok

@@ -41,6 +41,15 @@ var Workloads = []Workload{
 		},
 	},
 	{
+		Name: "bfs-batch", Desc: "parcours en largeur lisant l'adjacence par blocs",
+		Chunk: 1, DefaultQueries: []int{8, 64},
+		Gen: randomSources,
+		Run: func(g graph.Graph, q Query, s *traverse.Scratch) uint64 {
+			_, sum := traverse.BFSBatch(g, q.A, s)
+			return sum
+		},
+	},
+	{
 		Name: "dfs", Desc: "parcours en profondeur itératif depuis une source",
 		Chunk: 1, DefaultQueries: []int{8, 64},
 		Gen: randomSources,
@@ -53,8 +62,16 @@ var Workloads = []Workload{
 		Name: "neighbors", Desc: "lecture de l'adjacence d'un sommet tiré au hasard",
 		Chunk: 64, DefaultQueries: []int{100_000, 1_000_000},
 		Gen: randomSources,
-		Run: func(g graph.Graph, q Query, _ *traverse.Scratch) uint64 {
-			return traverse.Neighbors(g, q.A)
+		Run: func(g graph.Graph, q Query, s *traverse.Scratch) uint64 {
+			return traverse.Neighbors(g, q.A, s)
+		},
+	},
+	{
+		Name: "neighbors-batch", Desc: "lecture de l'adjacence par bloc, sans appel indirect",
+		Chunk: 64, DefaultQueries: []int{100_000, 1_000_000},
+		Gen: randomSources,
+		Run: func(g graph.Graph, q Query, s *traverse.Scratch) uint64 {
+			return traverse.NeighborsBatch(g, q.A, s)
 		},
 	},
 	{

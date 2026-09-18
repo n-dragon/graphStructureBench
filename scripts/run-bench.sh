@@ -23,12 +23,16 @@ run() { # run <nom> <arguments...>
 
 # Petits graphes : seule échelle où la matrice d'adjacence dense tient en
 # mémoire, donc la seule où l'on dispose de la borne basse en latence.
-run small-traversal -nodes 20000 -workloads bfs,dfs   -queries 64,512
-run small-queries   -nodes 20000 -workloads neighbors,hasedge -queries 10000,500000
+run small-traversal -nodes 20000 -workloads bfs,bfs-batch,dfs -queries 64,512
+run small-queries   -nodes 20000 -workloads neighbors,neighbors-batch,hasedge -queries 10000,500000
 
 # Grande échelle : le graphe ne tient plus dans le cache, la localité mémoire
 # de la structure devient le facteur dominant.
-run large-traversal -nodes 200000,1000000 -workloads bfs -queries 4,16
-run large-queries   -nodes 200000,1000000 -workloads neighbors,hasedge -queries 200000,2000000
+run large-traversal -nodes 200000,1000000 -workloads bfs,bfs-batch -queries 4,16
+run large-queries   -nodes 200000,1000000 -workloads neighbors,neighbors-batch,hasedge -queries 200000,2000000
+
+# Coût des trois façons de lire l'adjacence : callback, bloc, slice directe.
+echo "== callback-overhead"
+go test ./bench -run '^$' -bench CallbackOverhead -benchtime=500ms > "$OUT/callback-overhead.txt" 2>&1
 
 echo "résultats dans $OUT/"

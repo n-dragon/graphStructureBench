@@ -60,6 +60,16 @@ func (g *BitMatrix) ForEachNeighbor(u uint32, fn func(uint32) bool) {
 	}
 }
 
+func (g *BitMatrix) AppendNeighbors(dst []uint32, u uint32) []uint32 {
+	for i, w := range g.row(u) {
+		for w != 0 {
+			dst = append(dst, uint32(i*64+bits.TrailingZeros64(w)))
+			w &= w - 1
+		}
+	}
+	return dst
+}
+
 func (g *BitMatrix) HasEdge(u, v uint32) bool {
 	return g.bits[int(u)*g.wordsPerRow+int(v>>6)]&(1<<uint(v&63)) != 0
 }

@@ -42,6 +42,10 @@ func (g *AdjMap) ForEachNeighbor(u uint32, fn func(uint32) bool) {
 	}
 }
 
+func (g *AdjMap) AppendNeighbors(dst []uint32, u uint32) []uint32 {
+	return append(dst, g.adj[u]...)
+}
+
 func (g *AdjMap) HasEdge(u, v uint32) bool {
 	nb, ok := g.adj[u]
 	if !ok {

@@ -65,8 +65,10 @@ bitmap, donc le bitmap est promu **dès que `deg > n/32`**, sous plafond global
 | charge | requête unitaire | ce qu'elle isole |
 |---|---|---|
 | `bfs` | parcours en largeur complet depuis une source | parcours réel, accès en cascade |
+| `bfs-batch` | le même, en lisant l'adjacence par blocs | ce que coûte l'abstraction sur un parcours réel |
 | `dfs` | parcours en profondeur itératif | même chose, ordre d'accès différent |
 | `neighbors` | lecture de l'adjacence d'un sommet | coût d'accès pur, sans le bruit du parcours |
+| `neighbors-batch` | la même, par bloc sans appel indirect | coût d'accès sans le prix de l'itération |
 | `hasedge` | test d'existence, 50 % présentes / 50 % absentes | qualité de l'index en recherche |
 
 Les sources de parcours sont tirées parmi les sommets de degré non nul : partir
@@ -110,11 +112,23 @@ au carré parfait le plus proche.
   lots** (64 pour `neighbors`, 256 pour `hasedge`) : la latence est alors
   annotée `p50 = 12 µs/256`.
 
-### Équité
+### Équité et mode d'accès
 
-Toutes les structures sont lues via le même callback `ForEachNeighbor`, y
-compris celles qui pourraient rendre une slice directement.
-`BenchmarkCallbackOverhead` chiffre ce handicap pour pouvoir le déduire.
+L'adjacence se lit de deux façons, toutes deux exposées par l'interface et
+mesurées séparément :
+
+- **par callback** (`ForEachNeighbor`) — un appel indirect par voisin ;
+- **par bloc** (`AppendNeighbors`) — la structure remplit un tampon fourni
+  par l'appelant, qui le parcourt ensuite sans indirection.
+
+Le second mode existe parce que le premier coûte environ 13 ns par voisin :
+une charge de lecture d'adjacence mesurée uniquement par callback dit plus de
+choses sur l'abstraction que sur la structure. `BenchmarkCallbackOverhead`
+compare les deux modes et, pour les structures qui savent rendre une slice, la
+boucle directe — ce qui donne la borne basse.
+
+Aucune structure ne bénéficie d'un traitement de faveur : les neuf implémentent
+les deux modes.
 
 ## 7. Invariants de correction
 

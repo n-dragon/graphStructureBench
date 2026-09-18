@@ -61,6 +61,18 @@ func (g *SortedEdgeList) ForEachNeighbor(u uint32, fn func(uint32) bool) {
 	}
 }
 
+func (g *SortedEdgeList) AppendNeighbors(dst []uint32, u uint32) []uint32 {
+	limit := uint64(u+1) << 32
+	for i := g.lowerBound(u); i < len(g.keys); i++ {
+		k := g.keys[i]
+		if k >= limit {
+			break
+		}
+		dst = append(dst, uint32(k))
+	}
+	return dst
+}
+
 func (g *SortedEdgeList) HasEdge(u, v uint32) bool {
 	_, ok := slices.BinarySearch(g.keys, uint64(u)<<32|uint64(v))
 	return ok

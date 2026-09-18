@@ -58,6 +58,10 @@ func (g *CSR) ForEachNeighbor(u uint32, fn func(uint32) bool) {
 	}
 }
 
+func (g *CSR) AppendNeighbors(dst []uint32, u uint32) []uint32 {
+	return append(dst, g.targets[g.offsets[u]:g.offsets[u+1]]...)
+}
+
 func (g *CSR) HasEdge(u, v uint32) bool {
 	block := g.targets[g.offsets[u]:g.offsets[u+1]]
 	_, ok := slices.BinarySearch(block, v)
@@ -100,6 +104,10 @@ func (g *CSRSlices) ForEachNeighbor(u uint32, fn func(uint32) bool) {
 			return
 		}
 	}
+}
+
+func (g *CSRSlices) AppendNeighbors(dst []uint32, u uint32) []uint32 {
+	return append(dst, g.adj[u]...)
 }
 
 func (g *CSRSlices) HasEdge(u, v uint32) bool {

@@ -121,6 +121,19 @@ func (g *Hybrid) ForEachNeighbor(u uint32, fn func(uint32) bool) {
 	}
 }
 
+func (g *Hybrid) AppendNeighbors(dst []uint32, u uint32) []uint32 {
+	if !g.hub(u) {
+		return append(dst, g.targets[g.offsets[u]:g.offsets[u+1]]...)
+	}
+	for i, w := range g.row(u) {
+		for w != 0 {
+			dst = append(dst, uint32(i*64+bits.TrailingZeros64(w)))
+			w &= w - 1
+		}
+	}
+	return dst
+}
+
 func (g *Hybrid) HasEdge(u, v uint32) bool {
 	if g.hub(u) {
 		return g.row(u)[v>>6]&(1<<uint(v&63)) != 0

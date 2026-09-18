@@ -61,6 +61,7 @@ func TestStructuresAgreeWithReference(t *testing.T) {
 				if got := idx.NumEdges(); got != len(gg.Edges) {
 					t.Errorf("NumEdges = %d, attendu %d", got, len(gg.Edges))
 				}
+				var buf []uint32
 				for u := 0; u < gg.N; u++ {
 					var got []uint32
 					idx.ForEachNeighbor(uint32(u), func(v uint32) bool {
@@ -72,6 +73,12 @@ func TestStructuresAgreeWithReference(t *testing.T) {
 					}
 					if d := idx.Degree(uint32(u)); d != len(ref[u]) {
 						t.Fatalf("Degree(%d) = %d, attendu %d", u, d, len(ref[u]))
+					}
+					// L'accès par lot doit rendre exactement la même chose que
+					// l'accès par callback, y compris sur un tampon réutilisé.
+					buf = idx.AppendNeighbors(buf[:0], uint32(u))
+					if !slices.Equal(buf, ref[u]) {
+						t.Fatalf("AppendNeighbors(%d) = %v, attendu %v", u, buf, ref[u])
 					}
 				}
 				if idx.MemoryBytes() == 0 {
@@ -134,6 +141,10 @@ func TestTraversalsAgree(t *testing.T) {
 			s := traverse.NewScratch(gg.N)
 			nb, sumB := traverse.BFS(idx, 0, s)
 			nd, sumD := traverse.DFS(idx, 0, s)
+			if nbb, sumBB := traverse.BFSBatch(idx, 0, s); nbb != nb || sumBB != sumB {
+				t.Errorf("%s/%s: BFSBatch (%d,%d) diverge de BFS (%d,%d)",
+					gg.Spec.Kind, b.Name, nbb, sumBB, nb, sumB)
+			}
 			if nb != nd || sumB != sumD {
 				t.Errorf("%s/%s: BFS (%d,%d) et DFS (%d,%d) ne couvrent pas le même ensemble",
 					gg.Spec.Kind, b.Name, nb, sumB, nd, sumD)

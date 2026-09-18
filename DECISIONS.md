@@ -231,6 +231,58 @@ explications restent dans la langue du projet.
 
 ---
 
+## 15. Les fermetures de parcours sont construites une fois par worker
+
+*2026-09-18 — proposé, après constat de mesure*
+
+**Contexte.** La première campagne donnait un passage à l'échelle
+**superlinéaire** (×4,8 sur 4 cœurs), ce qui n'a pas de sens physique.
+L'analyse d'échappement (`go build -gcflags=-m`) a montré pourquoi : écrite à
+l'intérieur de la fonction de parcours, la fermeture passée à
+`ForEachNeighbor` s'échappait sur le tas **à chaque appel** — l'analyse
+d'échappement ne traverse pas un appel de méthode d'interface. La charge
+`neighbors` payait deux allocations par requête, et à 1 thread le GC
+concurrent se disputait le seul P disponible.
+
+**Décision.** Les trois fermetures (BFS, DFS, somme) sont construites une fois
+dans `NewScratch` et stockées dans la structure ; leur accumulateur est un
+champ du `Scratch`.
+
+**Conséquence.** Zéro allocation par requête, vérifié par `-benchmem`. Le
+scaling superlinéaire disparaît, et les chiffres de la première campagne sont
+caducs. Leçon retenue : un résultat physiquement impossible est un défaut de
+protocole, pas une bonne nouvelle.
+
+---
+
+## 16. Deux façons de lire l'adjacence, toutes deux mesurées
+
+*2026-09-18 — proposé, après constat de mesure*
+
+**Contexte.** `BenchmarkCallbackOverhead` a chiffré le prix de
+`ForEachNeighbor` une fois les allocations supprimées : **252 ns contre 42 ns**
+sur `csr` pour une lecture d'adjacence, soit environ 13 ns par voisin rien
+qu'en appel indirect. À ce niveau, la charge `neighbors` mesurait
+l'abstraction plus que la structure, et le coût uniforme **comprimait** les
+écarts entre structures.
+
+**Décision.** L'interface gagne `AppendNeighbors(dst, u) []uint32` : la
+structure remplit un tampon fourni par l'appelant, qui le parcourt ensuite
+sans indirection. Chaque structure la spécialise (memmove pour un CSR,
+décodage pour le varint, balayage de bits pour les bitmaps). Les charges
+`bfs-batch` et `neighbors-batch` mesurent ce second mode, à côté des charges
+par callback.
+
+**Alternative écartée.** Garder le seul callback et documenter son coût :
+honnête, mais on aurait publié des écarts comprimés par une constante commune.
+
+**Conséquence.** +10 lignes par structure, et le mode d'accès devient une
+**dimension mesurée** du banc plutôt qu'un biais. C'est en soi un résultat sur
+la conception d'un index : la forme de l'API d'itération pèse autant que la
+disposition des données.
+
+---
+
 ## Décisions ouvertes
 
 | sujet | état |

@@ -87,9 +87,10 @@ func BenchmarkNeighbors(b *testing.B) {
 	forEachIndex(b, func(b *testing.B, bi built) {
 		b.RunParallel(func(pb *testing.PB) {
 			r := rand.New(rand.NewPCG(1, 2))
+			s := traverse.NewScratch(bi.gg.N)
 			var sink uint64
 			for pb.Next() {
-				sink += traverse.Neighbors(bi.idx, uint32(r.IntN(bi.gg.N)))
+				sink += traverse.Neighbors(bi.idx, uint32(r.IntN(bi.gg.N)), s)
 			}
 			_ = sink
 		})
@@ -135,9 +136,10 @@ func BenchmarkBFS(b *testing.B) {
 	})
 }
 
-// BenchmarkCallbackOverhead compare l'itération par callback à l'itération
-// directe sur la slice d'adjacence, pour chiffrer le prix de l'abstraction
-// commune à toutes les structures.
+// BenchmarkCallbackOverhead compare les trois façons de lire l'adjacence :
+// le callback commun à toutes les structures, l'accès par lot, et l'itération
+// directe sur la slice quand la structure peut la rendre. L'écart chiffre le
+// prix de l'abstraction.
 func BenchmarkCallbackOverhead(b *testing.B) {
 	gg, err := gen.Generate(gen.Spec{Kind: "er", N: 500_000, AvgDegree: 8, Undirected: true, Seed: 42})
 	if err != nil {
@@ -148,19 +150,32 @@ func BenchmarkCallbackOverhead(b *testing.B) {
 		if err != nil {
 			continue
 		}
+		b.Run(builder.Name+"/batch", func(b *testing.B) {
+			b.ReportAllocs()
+			r := rand.New(rand.NewPCG(1, 2))
+			s := traverse.NewScratch(gg.N)
+			var sink uint64
+			for i := 0; i < b.N; i++ {
+				sink += traverse.NeighborsBatch(idx, uint32(r.IntN(gg.N)), s)
+			}
+			_ = sink
+		})
 		sg, ok := idx.(graph.SliceGraph)
 		if !ok {
 			continue
 		}
 		b.Run(builder.Name+"/callback", func(b *testing.B) {
+			b.ReportAllocs()
 			r := rand.New(rand.NewPCG(1, 2))
+			s := traverse.NewScratch(gg.N)
 			var sink uint64
 			for i := 0; i < b.N; i++ {
-				sink += traverse.Neighbors(idx, uint32(r.IntN(gg.N)))
+				sink += traverse.Neighbors(idx, uint32(r.IntN(gg.N)), s)
 			}
 			_ = sink
 		})
 		b.Run(builder.Name+"/slice", func(b *testing.B) {
+			b.ReportAllocs()
 			r := rand.New(rand.NewPCG(1, 2))
 			var sink uint64
 			for i := 0; i < b.N; i++ {
