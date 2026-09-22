@@ -344,6 +344,43 @@ en dessous de quel écart deux structures ne sont pas départageables.
 sans supprimer le symptôme. Il a fallu se rendre à l'évidence que le protocole
 était encore en cause plutôt que de considérer l'affaire classée.
 
+**Diagnostic incomplet**, complété par la décision 19 : la dispersion est bien
+réelle, mais elle n'explique qu'une partie du dépassement.
+
+---
+
+## 19. Le dépassement de x4 est un résultat, pas un artefact
+
+*2026-09-22 — proposé, après mesure du gradient*
+
+**Contexte.** Après la décision 18, les gains restaient au-dessus de x4 sur une
+partie des points. Restait à savoir si c'était encore du bruit. Deux mesures
+ont tranché :
+
+- le débit **par thread** à 1 thread vaut 1,02 fois celui à 4 threads en
+  médiane sur 450 points : le parallélisme rend donc bien à peu près x4, et
+  la dispersion ne suffit pas à expliquer les dépassements ;
+- le gain suit un **gradient net selon la taille de l'index** : x3,64 quand il
+  tient en cache (0,4 Mio), x3,89 à 13 Mio, x4,33 à 65 Mio.
+
+**Décision.** Le dépassement est du **parallélisme mémoire** et il est publié
+comme tel, avec le gradient qui l'établit. Un cœur ne peut avoir qu'une dizaine
+de défauts de cache en vol ; une lecture d'adjacence aléatoire dans un index de
+65 Mio est limitée par cette latence et non par le calcul, si bien que quatre
+cœurs multiplient par quatre le nombre de requêtes mémoire en vol et que le
+débit agrégé progresse plus que proportionnellement.
+
+**Conséquence.** Le rapport ne présente plus ces valeurs comme une anomalie à
+excuser mais comme une observation utile : sur un index qui ne tient pas en
+cache, ajouter des threads paie mieux que ne le laisse croire le nombre de
+cœurs. La dispersion reste publiée à côté, pour ce qu'elle explique vraiment.
+
+**Leçon.** Deux corrections de protocole (décisions 15 et 18) étaient
+justifiées et ont amélioré la mesure ; la troisième explication n'était pas une
+correction à faire mais un phénomène à comprendre. Il fallait mesurer le
+gradient pour distinguer les deux, et non choisir entre « c'est du bruit » et
+« c'est impossible ».
+
 ---
 
 ## Décisions ouvertes

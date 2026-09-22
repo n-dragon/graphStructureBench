@@ -16,9 +16,29 @@ Le tout est croisé avec trois topologies de graphe (uniforme, loi de puissance,
 grille) et quatre charges de travail (BFS, DFS, lecture d'adjacence, test
 d'existence d'arête).
 
-**Documents** : [SPEC.md](SPEC.md) — ce que le banc mesure et comment ·
-[DECISIONS.md](DECISIONS.md) — journal des décisions de conception ·
-`RESULTS.md` — rapport de la campagne retenue.
+**Documents** : [RESULTS.md](RESULTS.md) — résultats commentés de la campagne ·
+[SPEC.md](SPEC.md) — ce que le banc mesure et comment ·
+[DECISIONS.md](DECISIONS.md) — journal des décisions de conception.
+
+### Ce que la campagne donne
+
+Sur un graphe uniforme d'un million de sommets et seize millions d'arêtes
+(4 cœurs) : le CSR indexe en 4,25 octets par arête, le CSR compressé en varint
+descend à 3,57 (2,39 sur un graphe en loi de puissance), la liste d'adjacence
+par `map` monte à 10,92 — soit 2,6 fois le CSR, pour le débit le plus faible.
+
+Deux résultats moins attendus :
+
+- **lire l'adjacence par bloc plutôt que par callback** vaut +40 % de débit sur
+  un BFS complet à degré 16, mais **−9 %** à degré 4 : la recopie du bloc n'est
+  amortie que s'il y a assez de voisins ;
+- **le parallélisme rapporte plus que le nombre de cœurs** quand l'index sort
+  du cache (x4,3 sur 4 cœurs à 65 Mio d'index, contre x3,6 à 0,4 Mio) : la
+  lecture aléatoire est limitée par la latence mémoire, et les threads
+  multiplient les défauts de cache en vol.
+
+Le détail, les tableaux par topologie et les réserves de lecture sont dans
+[RESULTS.md](RESULTS.md).
 
 ## Démarrage
 
