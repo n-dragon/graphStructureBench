@@ -150,20 +150,7 @@ func BenchmarkCallbackOverhead(b *testing.B) {
 		if err != nil {
 			continue
 		}
-		b.Run(builder.Name+"/batch", func(b *testing.B) {
-			b.ReportAllocs()
-			r := rand.New(rand.NewPCG(1, 2))
-			s := traverse.NewScratch(gg.N)
-			var sink uint64
-			for i := 0; i < b.N; i++ {
-				sink += traverse.NeighborsBatch(idx, uint32(r.IntN(gg.N)), s)
-			}
-			_ = sink
-		})
-		sg, ok := idx.(graph.SliceGraph)
-		if !ok {
-			continue
-		}
+		// Les deux modes communs à toutes les structures.
 		b.Run(builder.Name+"/callback", func(b *testing.B) {
 			b.ReportAllocs()
 			r := rand.New(rand.NewPCG(1, 2))
@@ -174,6 +161,22 @@ func BenchmarkCallbackOverhead(b *testing.B) {
 			}
 			_ = sink
 		})
+		b.Run(builder.Name+"/batch", func(b *testing.B) {
+			b.ReportAllocs()
+			r := rand.New(rand.NewPCG(1, 2))
+			s := traverse.NewScratch(gg.N)
+			var sink uint64
+			for i := 0; i < b.N; i++ {
+				sink += traverse.NeighborsBatch(idx, uint32(r.IntN(gg.N)), s)
+			}
+			_ = sink
+		})
+		// La borne basse, réservée aux structures qui peuvent rendre leur
+		// adjacence telle quelle.
+		sg, ok := idx.(graph.SliceGraph)
+		if !ok {
+			continue
+		}
 		b.Run(builder.Name+"/slice", func(b *testing.B) {
 			b.ReportAllocs()
 			r := rand.New(rand.NewPCG(1, 2))

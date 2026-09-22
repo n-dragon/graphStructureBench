@@ -1,3 +1,4 @@
 # Sorties de campagne : régénérables par scripts/run-bench.sh.
 # Le rapport retenu est versionné dans RESULTS.md.
 results/
+results-*/
