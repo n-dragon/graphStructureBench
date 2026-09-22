@@ -21,7 +21,9 @@ type Workload struct {
 	Desc string
 	// Chunk : nombre de requêtes par unité de temps chronométrée. Pour les
 	// requêtes de quelques dizaines de nanosecondes, chronométrer chaque
-	// requête coûterait plus cher que la requête elle-même.
+	// requête coûterait plus cher que la requête elle-même. Les tailles sont
+	// choisies pour qu'un lot dure de l'ordre de 10 µs : en deçà, le coût des
+	// deux appels à time.Now() entre dans la mesure et gonfle sa variance.
 	Chunk int
 	// DefaultQueries : tailles de lot par défaut si l'utilisateur n'en impose pas.
 	DefaultQueries []int
@@ -60,7 +62,7 @@ var Workloads = []Workload{
 	},
 	{
 		Name: "neighbors", Desc: "lecture de l'adjacence d'un sommet tiré au hasard",
-		Chunk: 64, DefaultQueries: []int{100_000, 1_000_000},
+		Chunk: 512, DefaultQueries: []int{100_000, 1_000_000},
 		Gen: randomSources,
 		Run: func(g graph.Graph, q Query, s *traverse.Scratch) uint64 {
 			return traverse.Neighbors(g, q.A, s)
@@ -68,7 +70,7 @@ var Workloads = []Workload{
 	},
 	{
 		Name: "neighbors-batch", Desc: "lecture de l'adjacence par bloc, sans appel indirect",
-		Chunk: 64, DefaultQueries: []int{100_000, 1_000_000},
+		Chunk: 512, DefaultQueries: []int{100_000, 1_000_000},
 		Gen: randomSources,
 		Run: func(g graph.Graph, q Query, s *traverse.Scratch) uint64 {
 			return traverse.NeighborsBatch(g, q.A, s)
@@ -76,7 +78,7 @@ var Workloads = []Workload{
 	},
 	{
 		Name: "hasedge", Desc: "test d'existence d'arête, moitié présentes moitié absentes",
-		Chunk: 256, DefaultQueries: []int{100_000, 1_000_000},
+		Chunk: 2048, DefaultQueries: []int{100_000, 1_000_000},
 		Gen: edgeProbes,
 		Run: func(g graph.Graph, q Query, _ *traverse.Scratch) uint64 {
 			if g.HasEdge(q.A, q.B) {

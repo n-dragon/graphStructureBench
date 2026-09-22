@@ -23,6 +23,7 @@ def load(results_dir):
                           "analytic_bytes", "scratch_bytes", "wall_ns", "p50_ns", "p99_ns", "chunk"):
                     r[k] = int(r[k])
                 r["throughput_qps"] = float(r["throughput_qps"])
+                r["spread"] = float(r.get("spread") or 1.0)
                 rows.append(r)
     return rows
 
@@ -143,10 +144,13 @@ def scaling_table(rows, kind, n, workload):
         for t in threads:
             c = sel(sub, structure=s, threads=t)
             vals.append(max(c, key=lambda x: x["throughput_qps"])["throughput_qps"] if c else 0)
+        spreads = [max((x["spread"] for x in sel(sub, structure=s, threads=t)), default=1.0)
+                   for t in threads]
         row = [s] + [rate(v) for v in vals]
         row.append(f"x{vals[-1] / vals[0]:.2f}" if vals[0] else "-")
+        row.append(f"{100 * (max(spreads) - 1):.0f} %")
         body.append(row)
-    return table(["structure"] + [f"{t} th." for t in threads] + ["gain"], body), q
+    return table(["structure"] + [f"{t} th." for t in threads] + ["gain", "dispersion"], body), q
 
 
 def latency_table(rows, kind, n, workload):

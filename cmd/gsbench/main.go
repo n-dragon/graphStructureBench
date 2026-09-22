@@ -28,7 +28,7 @@ func main() {
 		degF       = flag.Int("deg", 8, "degré sortant moyen visé")
 		workloadsF = flag.String("workloads", "bfs,neighbors,hasedge", "charges: bfs, dfs, neighbors, hasedge")
 		structsF   = flag.String("structs", "", "structures à mesurer (vide = toutes)")
-		runsF      = flag.Int("runs", 3, "répétitions chronométrées, le meilleur temps est retenu")
+		runsF      = flag.Int("runs", 5, "répétitions chronométrées ; le meilleur temps est retenu, leur dispersion est rapportée")
 		seedF      = flag.Uint64("seed", 42, "graine du générateur")
 		directedF  = flag.Bool("directed", false, "garder le graphe orienté (par défaut il est symétrisé)")
 		csvF       = flag.String("csv", "", "écrire les mesures brutes dans ce fichier CSV")
@@ -113,10 +113,21 @@ func main() {
 						for _, th := range threads {
 							bench.Run(idx, wl, qs, th) // chauffe : caches et goroutines
 							best := bench.Run(idx, wl, qs, th)
+							slowest := best.Wall
 							for i := 1; i < *runsF; i++ {
-								if st := bench.Run(idx, wl, qs, th); st.Wall < best.Wall {
+								st := bench.Run(idx, wl, qs, th)
+								if st.Wall < best.Wall {
 									best = st
 								}
+								if st.Wall > slowest {
+									slowest = st.Wall
+								}
+							}
+							// Dispersion entre répétitions : sans elle, on
+							// prendrait du bruit pour un écart de structure.
+							spread := 1.0
+							if best.Wall > 0 {
+								spread = float64(slowest) / float64(best.Wall)
 							}
 							k := qkey{wl.Name, count}
 							if prev, ok := checksums[k]; ok && prev != best.Checksum {
@@ -132,7 +143,7 @@ func main() {
 								AnalyticBytes: info.AnalyticBytes, ScratchBytes: best.ScratchBytes,
 								Wall: best.Wall, Throughput: best.Throughput,
 								P50: best.P50, P99: best.P99, ChunkSize: best.ChunkSize,
-								Checksum: best.Checksum,
+								Spread: spread, Checksum: best.Checksum,
 							})
 						}
 					}

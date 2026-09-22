@@ -31,6 +31,11 @@ type Result struct {
 	P50, P99   time.Duration
 	ChunkSize  int
 	Checksum   uint64
+
+	// Spread est le rapport entre la plus lente et la plus rapide des
+	// répétitions de ce point. Au-delà de ~1,1, l'écart entre deux structures
+	// voisines n'est pas interprétable.
+	Spread float64
 }
 
 // --- rendu de tableaux, en texte aligné ou en markdown ---
@@ -320,7 +325,7 @@ func WriteCSV(w io.Writer, rs []Result) error {
 	defer cw.Flush()
 	head := []string{"kind", "n", "m", "structure", "workload", "threads", "queries",
 		"build_ns", "index_bytes", "analytic_bytes", "scratch_bytes",
-		"wall_ns", "throughput_qps", "p50_ns", "p99_ns", "chunk", "checksum"}
+		"wall_ns", "throughput_qps", "p50_ns", "p99_ns", "chunk", "spread", "checksum"}
 	if err := cw.Write(head); err != nil {
 		return err
 	}
@@ -333,7 +338,8 @@ func WriteCSV(w io.Writer, rs []Result) error {
 			strconv.FormatInt(r.Wall.Nanoseconds(), 10),
 			strconv.FormatFloat(r.Throughput, 'f', 2, 64),
 			strconv.FormatInt(r.P50.Nanoseconds(), 10), strconv.FormatInt(r.P99.Nanoseconds(), 10),
-			strconv.Itoa(r.ChunkSize), strconv.FormatUint(r.Checksum, 10)}
+			strconv.Itoa(r.ChunkSize), strconv.FormatFloat(r.Spread, 'f', 4, 64),
+			strconv.FormatUint(r.Checksum, 10)}
 		if err := cw.Write(rec); err != nil {
 			return err
 		}

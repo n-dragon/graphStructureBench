@@ -258,21 +258,47 @@ def main():
 
     # --- Scaling ---
     w("## 4. Passage à l'échelle\n")
-    sc = []
+    gains_all, spreads = [], []
     for kind in kinds:
         n = big[kind]
-        for s in ("csr", "varint-csr", "adjmap"):
-            one = pick(rows, kind=kind, n=n, workload="hasedge", structure=s, threads=1)
-            mx = pick(rows, kind=kind, n=n, workload="hasedge", structure=s, threads=threads_max)
-            if one and mx and one["throughput_qps"]:
-                sc.append((kind, s, mx["throughput_qps"] / one["throughput_qps"]))
-    if sc:
-        vals = [v for _, _, v in sc]
-        w(f"Sur {threads_max} cœurs, le gain observé va de x{min(vals):.2f} à x{max(vals):.2f} selon "
-          f"la structure et la charge. Aucune valeur ne dépasse le nombre de cœurs : c'est le "
-          f"contrôle de vraisemblance du protocole. Une première campagne donnait x4.8 sur 4 cœurs, "
-          f"ce qui a révélé une allocation par requête dans le chemin de mesure (voir DECISIONS.md, "
-          f"décision 15).\n")
+        for wl in uniq(sel(rows, kind=kind, n=n), "workload"):
+            for st in uniq(sel(rows, kind=kind, n=n, workload=wl), "structure"):
+                for q in uniq(sel(rows, kind=kind, n=n, workload=wl, structure=st), "queries"):
+                    a = pick(rows, kind=kind, n=n, workload=wl, structure=st, queries=q, threads=1)
+                    b = pick(rows, kind=kind, n=n, workload=wl, structure=st, queries=q, threads=threads_max)
+                    if a and b and a["throughput_qps"]:
+                        gains_all.append(b["throughput_qps"] / a["throughput_qps"])
+                    if a:
+                        spreads.append(a["spread"])
+    if gains_all:
+        gains_all.sort()
+        med = gains_all[len(gains_all) // 2]
+        over = sum(1 for g in gains_all if g > threads_max)
+        w(f"Sur {threads_max} cœurs, le gain médian entre 1 et {threads_max} threads est de "
+          f"x{med:.2f}, réparti de x{gains_all[0]:.2f} à x{gains_all[-1]:.2f} sur "
+          f"{len(gains_all)} points de mesure.\n")
+        if over:
+            spreads.sort()
+            med_spread = spreads[len(spreads) // 2] if spreads else 1.0
+            worst_spread = spreads[-1] if spreads else 1.0
+            w(f"**{over} de ces {len(gains_all)} points dépassent x{threads_max}**, ce qui est "
+              f"physiquement impossible sur {threads_max} cœurs. L'explication est dans la "
+              f"dispersion : les répétitions d'un même point à 1 thread varient de "
+              f"{100 * (med_spread - 1):.0f} % en médiane et jusqu'à "
+              f"{100 * (worst_spread - 1):.0f} % au pire, contre bien moins à "
+              f"{threads_max} threads. Comparer deux « meilleurs de {5} » indépendants "
+              f"transforme cette variance en gain apparent. **Les valeurs de gain au-delà de "
+              f"x{threads_max * 0.9:.1f} sont donc à lire comme « le parallélisme paie à peu "
+              f"près pleinement », pas comme une mesure fine.** La colonne « dispersion » des "
+              f"tableaux détaillés donne l'écart entre répétitions, pour juger de ce qui est "
+              f"interprétable.\n")
+        else:
+            w("Aucun point ne dépasse le nombre de cœurs, ce qui est le contrôle de "
+              "vraisemblance attendu.\n")
+        w("Une première version du protocole donnait des gains bien supérieurs, ce qui a "
+          "révélé deux défauts successifs : une allocation par requête dans le chemin de "
+          "mesure, puis des lots chronométrés trop courts pour que le coût de l'horloge soit "
+          "négligeable (voir `DECISIONS.md`, décisions 15 et 18).\n")
     w("Les index sont immuables après construction : aucune synchronisation n'est nécessaire en "
       "lecture, et le seul état par thread est le tampon de parcours.\n")
 

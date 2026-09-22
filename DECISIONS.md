@@ -306,6 +306,46 @@ une fois, du côté de l'appelant.
 
 ---
 
+## 18. Mesurer la dispersion plutôt que de supposer la stabilité
+
+*2026-09-22 — proposé, après enquête sur un résultat impossible*
+
+**Contexte.** Malgré la décision 15, la campagne affichait encore des gains
+superlinéaires : **299 points sur 804 dépassaient x4,2 sur 4 cœurs**. Quatre
+hypothèses ont été testées et écartées par la mesure :
+
+1. `GOMAXPROCS=1` pénaliserait un worker unique → non, ~5 % d'écart ;
+2. le surcoût serait hors des lots chronométrés (démarrage des goroutines,
+   allocation des tampons) → non, 91 % du temps est bien dans les lots ;
+3. un cycle de GC tomberait pendant la mesure → non, zéro cycle observé ;
+4. l'ordre de mesure pénaliserait le premier point → non, inverser l'ordre ne
+   déplace pas l'anomalie.
+
+La cause est ailleurs : **le point à 1 thread est bruité de ±15 %** (16,5 à
+19,1 M req/s d'une répétition à l'autre) quand celui à 4 threads est stable.
+Comparer deux « meilleurs de 3 » tirés indépendamment transforme cette variance
+en gain apparent.
+
+**Décision.** Trois changements :
+
+- les lots chronométrés passent de 64 à 512 requêtes (et de 256 à 2048 pour le
+  test d'arête), pour qu'un lot dure de l'ordre de 10 µs et que le coût des
+  deux appels à `time.Now()` sorte de la mesure ;
+- le nombre de répétitions passe de 3 à 5 ;
+- chaque point porte sa **dispersion** (rapport de la plus lente à la plus
+  rapide des répétitions), exportée en CSV et affichée dans les tableaux.
+
+**Conséquence.** Les gains retombent dans le domaine physique, et surtout le
+rapport ne prétend plus à une précision qu'il n'a pas : la dispersion est
+publiée à côté de chaque comparaison, et le texte engendré dit explicitement
+en dessous de quel écart deux structures ne sont pas départageables.
+
+**Leçon.** La première correction (décision 15) avait supprimé une vraie cause
+sans supprimer le symptôme. Il a fallu se rendre à l'évidence que le protocole
+était encore en cause plutôt que de considérer l'affaire classée.
+
+---
+
 ## Décisions ouvertes
 
 | sujet | état |
