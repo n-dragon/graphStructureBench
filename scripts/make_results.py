@@ -5,7 +5,12 @@ Le texte comme les tableaux sont engendrés depuis les mesures : aucun chiffre
 n'est saisi à la main, donc aucune affirmation ne peut devenir périmée sans
 que la régénération ne la corrige.
 
-    python3 scripts/make_results.py results > RESULTS.md
+    python3 scripts/make_results.py campaigns/2026-09-24 > RESULTS.md
+    python3 scripts/make_results.py campaigns/2026-09-24 campaigns/2026-09-22 > RESULTS.md
+
+Avec une seconde campagne en argument, le rapport mesure la reproductibilité
+entre les deux, en déduit le seuil en dessous duquel deux structures sont
+déclarées ex æquo, et n'affirme un effet que s'il se retrouve dans les deux.
 """
 import re
 import subprocess
@@ -63,6 +68,61 @@ def speedup(rows, kind, n, workload_a, workload_b, structure, threads):
 def largest_n(rows, kind):
     ns = uniq(sel(rows, kind=kind), "n")
     return max(ns) if ns else None
+
+
+# --- reproductibilité entre campagnes ---
+
+def point_key(r):
+    return (r["kind"], r["n"], r["structure"], r["workload"], r["threads"], r["queries"])
+
+
+def compare_runs(cur, prev):
+    """Confronte deux campagnes point à point."""
+    a = {point_key(r): r for r in prev}
+    b = {point_key(r): r for r in cur}
+    common = [k for k in b if k in a and a[k]["throughput_qps"]]
+    ratios = sorted(b[k]["throughput_qps"] / a[k]["throughput_qps"] for k in common)
+    beyond = sum(1 for k in common
+                 if not (1 / max(a[k]["spread"], b[k]["spread"])
+                         <= b[k]["throughput_qps"] / a[k]["throughput_qps"]
+                         <= max(a[k]["spread"], b[k]["spread"])))
+    mem = max((abs(b[k]["index_bytes"] - a[k]["index_bytes"]) / a[k]["index_bytes"]
+               for k in common if a[k]["index_bytes"]), default=0.0)
+    q = lambda p: ratios[int(p * (len(ratios) - 1))]
+    return {"n": len(common), "median": q(.5), "q10": q(.1), "q90": q(.9),
+            "beyond": beyond, "mem": mem}
+
+
+def winners_stability(cur, prev):
+    def groups(rows):
+        g = {}
+        for r in rows:
+            g.setdefault((r["kind"], r["n"], r["workload"], r["threads"], r["queries"]), []).append(r)
+        return g
+    go, gn = groups(prev), groups(cur)
+    keys = [k for k in go if k in gn]
+    same = sum(1 for k in keys
+               if max(go[k], key=lambda r: r["throughput_qps"])["structure"] ==
+               max(gn[k], key=lambda r: r["throughput_qps"])["structure"])
+    return same, len(keys)
+
+
+def mlp_gradient(rows, threads_max):
+    """Gain médian 1→max threads par classe de taille d'index."""
+    out = []
+    for label, pred in (("en cache", lambda n: n < 50_000),
+                        ("~200 000 sommets", lambda n: 50_000 < n < 500_000),
+                        ("~1 000 000 sommets", lambda n: n >= 500_000)):
+        idx = {}
+        for r in rows:
+            if pred(r["n"]):
+                idx.setdefault((r["kind"], r["n"], r["structure"], r["workload"], r["queries"]),
+                               {})[r["threads"]] = r["throughput_qps"]
+        g = sorted(d[threads_max] / d[1] for d in idx.values()
+                   if 1 in d and threads_max in d and d[1])
+        if g:
+            out.append((label, g[len(g) // 2]))
+    return out
 
 
 # --- coût de l'abstraction ---------------------------------------------------
@@ -131,6 +191,14 @@ def main():
     rows = load(results_dir)
     if not rows:
         sys.exit(f"aucun CSV dans {results_dir}/")
+    prev_dir = Path(sys.argv[2]) if len(sys.argv) > 2 else None
+    prev = load(prev_dir) if prev_dir else []
+    cmp_ = compare_runs(rows, prev) if prev else None
+    # Seuil d'ex aequo : la demi-largeur de la bande q10-q90 des écarts entre
+    # campagnes. Deux structures plus proches que cela ne sont pas
+    # départageables sur cette machine. Faute de seconde campagne, on retient
+    # une valeur prudente.
+    tie = (cmp_["q90"] - cmp_["q10"]) / 2 if cmp_ else 0.10
 
     go_version = subprocess.run(["go", "version"], capture_output=True, text=True).stdout.split()[2].removeprefix("go")
     cores = subprocess.run(["nproc"], capture_output=True, text=True).stdout.strip()
@@ -143,11 +211,16 @@ def main():
     w = P.append
 
     w("# Résultats de campagne\n")
-    w(f"Machine : {cores} cœurs, Go {go_version}. Campagne du {date.today().isoformat()}, "
-      f"code au commit `{commit}`.\n")
+    def campaign_date(d):
+        return d.name if re.fullmatch(r"\d{4}-\d{2}-\d{2}", d.name) else date.today().isoformat()
+
+    w(f"Machine : {cores} cœurs, Go {go_version}. Campagne du {campaign_date(results_dir)}"
+      + (f", comparée à celle du {campaign_date(prev_dir)}" if prev_dir else "")
+      + f" ; rapport engendré au commit `{commit}`.\n")
     w("Ce rapport est **engendré** par `scripts/make_results.py` à partir des CSV produits par "
       "`scripts/run-bench.sh` : les chiffres cités dans le texte sont extraits des mesures, pas "
-      "recopiés. Les sorties complètes du balayage se trouvent dans `results/`.\n")
+      f"recopiés. Les mesures brutes sont versionnées dans `{results_dir}/`"
+      + (f" et `{prev_dir}/`" if prev_dir else "") + ".\n")
 
     # --- En bref ---
     w("## En bref\n")
@@ -155,26 +228,99 @@ def main():
     n_ref = big[ref_kind]
     csr = mem_of(rows, ref_kind, n_ref, "csr")
     small = smallest_structure(rows, ref_kind, n_ref)
+    def podium(kind, n, workload):
+        """Le meilleur, et ceux qui en sont à moins du seuil d'ex aequo."""
+        best = {}
+        for r in sel(rows, kind=kind, n=n, workload=workload, threads=threads_max):
+            if r["structure"] not in best or r["throughput_qps"] > best[r["structure"]]["throughput_qps"]:
+                best[r["structure"]] = r
+        if not best:
+            return "-"
+        top = max(best.values(), key=lambda r: r["throughput_qps"])
+        tied = sorted((r for r in best.values()
+                       if r["throughput_qps"] >= top["throughput_qps"] * (1 - tie)),
+                      key=lambda r: -r["throughput_qps"])
+        return " ≈ ".join(r["structure"] for r in tied) + f" ({rate(top['throughput_qps'])} req/s)"
+
     body = []
     for kind in kinds:
         n = big[kind]
-        fast_bfs = best_structure(rows, kind, n, "bfs-batch", threads_max)
-        fast_edge = best_structure(rows, kind, n, "hasedge", threads_max)
         compact = smallest_structure(rows, kind, n)
-        row = [f"{kind} (n={n})"]
-        row.append(f"{fast_bfs['structure']} ({rate(fast_bfs['throughput_qps'])} req/s)" if fast_bfs else "-")
-        row.append(f"{fast_edge['structure']} ({rate(fast_edge['throughput_qps'])} req/s)" if fast_edge else "-")
-        row.append(f"{compact['structure']} ({compact['index_bytes'] / compact['m']:.2f} o/arête)" if compact else "-")
-        body.append(row)
+        body.append([f"{kind} (n={n})", podium(kind, n, "bfs-batch"), podium(kind, n, "hasedge"),
+                     f"{compact['structure']} ({compact['index_bytes'] / compact['m']:.2f} o/arête)"
+                     if compact else "-"])
     w(table(["graphe", "parcours le plus rapide", "test d'arête le plus rapide", "index le plus compact"], body))
+    w(f"\n« ≈ » relie les structures à moins de {100 * tie:.0f} % de la meilleure : "
+      + ("c'est l'écart que deux campagnes identiques produisent sur cette machine (§ 7), "
+         "elles ne sont donc pas départageables.\n" if cmp_ else
+         "seuil prudent, faute de seconde campagne pour mesurer la reproductibilité.\n"))
 
-    w("\n**Ce qu'on retient.** Le CSR est le choix par défaut : il est le plus rapide ou à "
-      "quelques pourcents du plus rapide sur toutes les charges, et sa mémoire est celle d'un "
-      "tableau plat. La liste d'adjacence par `map`, le réflexe idiomatique en Go, est la plus "
-      "lente **et** la plus lourde — c'est le seul verdict sans nuance du banc. Le CSR compressé "
-      "en varint est la réponse quand la mémoire prime : il descend sous le CSR en taille, au prix "
-      "d'un débit moindre. La matrice dense n'a d'intérêt que sur de petits graphes, et uniquement "
-      "pour le test d'arête.\n")
+    # Ce qu'on retient : chaque affirmation est calculée, y compris le choix
+    # des structures nommées.
+    def best_per_structure(kind, n, workload):
+        best = {}
+        for r in sel(rows, kind=kind, n=n, workload=workload, threads=threads_max):
+            if r["structure"] not in best or r["throughput_qps"] > best[r["structure"]]["throughput_qps"]:
+                best[r["structure"]] = r
+        return best
+
+    family = None  # structures ex aequo avec la meilleure, sur toutes les charges et topologies
+    for kind in kinds:
+        for wl in ("bfs-batch", "hasedge", "neighbors-batch"):
+            best = best_per_structure(kind, big[kind], wl)
+            if not best:
+                continue
+            top = max(r["throughput_qps"] for r in best.values())
+            tied = {st for st, r in best.items() if r["throughput_qps"] >= top * (1 - tie)}
+            family = tied if family is None else family & tied
+    family = family or set()
+    mems = {st: mem_of(rows, ref_kind, n_ref, st) for st in family}
+    mems = {st: m for st, m in mems.items() if m}
+    lightest = min(mems, key=lambda st: mems[st]["index_bytes"]) if mems else None
+
+    heavy_pool = [r for r in sel(rows, kind=ref_kind, n=n_ref) if r["structure"] != "bitmatrix"]
+    heaviest = max(heavy_pool, key=lambda r: r["index_bytes"]) if heavy_pool else None
+
+    def median_rank(structure):
+        ranks = []
+        groups = {}
+        for r in rows:
+            groups.setdefault((r["kind"], r["n"], r["workload"], r["threads"], r["queries"]), []).append(r)
+        for v in groups.values():
+            order = [r["structure"] for r in sorted(v, key=lambda r: -r["throughput_qps"])]
+            if structure in order:
+                ranks.append((order.index(structure) + 1, len(order)))
+        ranks.sort()
+        return ranks[len(ranks) // 2] if ranks else None
+
+    parts = []
+    if family and lightest:
+        others = sorted(family - {lightest})
+        parts.append(
+            f"**Le choix par défaut est `{lightest}`.** Il fait partie du groupe de tête sur toutes "
+            f"les charges et topologies" + (f", à égalité avec {', '.join(f'`{o}`' for o in others)}" if others else "")
+            + f" — l'écart de vitesse entre eux reste sous le seuil d'ex æquo. Ce qui le distingue "
+            f"est la mémoire : c'est le plus compact du groupe ("
+            + ", ".join(f"`{st}` {mems[st]['index_bytes'] / mems[st]['m']:.2f}"
+                        for st in sorted(mems, key=lambda st: mems[st]['index_bytes']))
+            + " o/arête).")
+    if heaviest:
+        rk = median_rank(heaviest["structure"])
+        parts.append(
+            f"`{heaviest['structure']}` est l'index le plus lourd "
+            f"({heaviest['index_bytes'] / heaviest['m']:.2f} o/arête, "
+            f"{heaviest['index_bytes'] / csr['index_bytes']:.1f} fois le CSR)"
+            + (f" et se classe en médiane {rk[0]}e sur {rk[1]} en débit" if rk else "")
+            + " : aucun critère ne le justifie ici.")
+    v = mem_of(rows, ref_kind, n_ref, "varint-csr")
+    vr = pick(rows, kind=ref_kind, n=n_ref, workload="neighbors-batch", structure="varint-csr", threads=threads_max)
+    cr = pick(rows, kind=ref_kind, n=n_ref, workload="neighbors-batch", structure="csr", threads=threads_max)
+    if v and vr and cr and csr:
+        parts.append(
+            f"`varint-csr` est la réponse quand la mémoire prime : {100 * (1 - v['index_bytes'] / csr['index_bytes']):.0f} % "
+            f"de moins que le CSR sur `{ref_kind}`, pour un débit de lecture d'adjacence de "
+            f"{100 * vr['throughput_qps'] / cr['throughput_qps']:.0f} % du sien.")
+    w("\n**Ce qu'on retient.** " + " ".join(parts) + "\n")
 
     # --- Mémoire ---
     w("## 1. Mémoire\n")
@@ -304,19 +450,38 @@ def main():
         w(table(["sommets", "index csr", "gain médian", f"points au-dessus de x{threads_max}"], body))
         biggest = buckets[-1]
         smallest = buckets[0]
-        w(f"\n**Le parallélisme rapporte davantage quand l'index sort du cache.** À "
-          f"{fr(smallest[0])} sommets, l'index de {smallest[1] / (1 << 20):.1f} Mio tient dans le "
-          f"cache du processeur et le gain plafonne à "
-          f"x{smallest[2][len(smallest[2]) // 2]:.2f}. À {fr(biggest[0])} sommets, les "
-          f"{biggest[1] / (1 << 20):.1f} Mio de l'index se lisent en mémoire vive et le gain "
-          f"médian atteint x{biggest[2][len(biggest[2]) // 2]:.2f} — au-delà du nombre de cœurs.\n")
-        w("Ce dépassement n'est pas une erreur de mesure, c'est du **parallélisme mémoire**. Un "
-          "cœur ne peut avoir qu'une dizaine de défauts de cache en vol simultanément ; une "
-          "lecture d'adjacence aléatoire dans un index de 65 Mio est limitée par cette latence, "
-          "pas par le calcul. Quatre cœurs quadruplent le nombre de requêtes mémoire en vol, et "
-          "le débit agrégé progresse plus que proportionnellement. C'est un résultat utile en "
-          "soi : sur un index qui ne tient pas en cache, ajouter des threads paie mieux que ne le "
-          "laisse croire le nombre de cœurs.\n")
+        grad_cur = mlp_gradient(rows, threads_max)
+        grad_prev = mlp_gradient(prev, threads_max) if prev else []
+        top_cur = grad_cur[-1][1] if grad_cur else 0
+        top_prev = grad_prev[-1][1] if grad_prev else None
+        rises = bool(grad_cur) and grad_cur[-1][1] > grad_cur[0][1] and (
+            not grad_prev or grad_prev[-1][1] > grad_prev[0][1])
+        superlinear = top_cur > threads_max * (1 + tie / 2) and (
+            top_prev is None or top_prev > threads_max * (1 + tie / 2))
+        if rises:
+            w(f"\n**Le gain progresse quand l'index sort du cache.** À {fr(smallest[0])} sommets, "
+              f"l'index de {smallest[1] / (1 << 20):.1f} Mio tient dans le cache du processeur ; à "
+              f"{fr(biggest[0])} sommets, ses {biggest[1] / (1 << 20):.1f} Mio se lisent en mémoire "
+              f"vive. Une lecture d'adjacence aléatoire y est limitée par la latence mémoire plutôt "
+              f"que par le calcul, et chaque cœur ajouté apporte ses propres défauts de cache en vol "
+              f"(parallélisme mémoire).\n")
+            if grad_prev:
+                w("| gain médian 1 → " + str(threads_max) + " threads | "
+                  + " | ".join(l for l, _ in grad_cur) + " |")
+                w("| --- | " + " | ".join("---:" for _ in grad_cur) + " |")
+                w("| cette campagne | " + " | ".join(f"x{v:.2f}" for _, v in grad_cur) + " |")
+                w("| campagne précédente | " + " | ".join(f"x{v:.2f}" for _, v in grad_prev) + " |")
+                w("")
+            if superlinear:
+                w(f"Hors cache, le gain dépasse le nombre de cœurs de façon reproductible "
+                  f"(x{top_cur:.2f}" + (f", et x{top_prev:.2f} à la campagne précédente" if top_prev else "")
+                  + ").\n")
+            else:
+                w(f"**Un gain supérieur au nombre de cœurs n'est en revanche pas établi.** Hors "
+                  f"cache, cette campagne mesure x{top_cur:.2f}"
+                  + (f" et la précédente x{top_prev:.2f}" if top_prev else "")
+                  + f" : l'écart est de l'ordre de la variance entre campagnes. La tendance est "
+                  f"solide, son amplitude au-delà de x{threads_max} ne l'est pas.\n")
         spreads = sorted(r["spread"] for r in rows if r["threads"] == 1)
         if spreads:
             med_spread = spreads[len(spreads) // 2]
@@ -350,10 +515,35 @@ def main():
             w(section_graph(rows, kind, n))
             w("")
 
+    # --- Reproductibilité ---
+    if cmp_:
+        same, total = winners_stability(rows, prev)
+        w("## 7. Reproductibilité entre campagnes\n")
+        w(f"La même campagne, même code de mesure et même machine, a été rejouée le "
+          f"{campaign_date(results_dir)} après celle du {campaign_date(prev_dir)}. Sur "
+          f"{fr(cmp_['n'])} points de mesure communs :\n")
+        w(f"- **la mémoire est reproductible** : écart maximal de {100 * cmp_['mem']:.2f} % ;\n"
+          f"- **le débit l'est beaucoup moins** : rapport médian de {cmp_['median']:.3f} entre les "
+          f"deux campagnes, mais 80 % des points entre {cmp_['q10']:.2f} et {cmp_['q90']:.2f}, et "
+          f"{100 * cmp_['beyond'] / cmp_['n']:.0f} % des points s'écartent de plus que leur propre "
+          f"dispersion interne ;\n"
+          f"- **la structure la plus rapide d'un point donné** est la même dans {same} cas sur "
+          f"{total} seulement.\n")
+        w("La dispersion mesurée *au sein* d'une campagne sous-estime donc la variance réelle : "
+          "des répétitions rapprochées partagent l'état de la machine, deux campagnes à des jours "
+          "d'écart non. D'où les deux règles appliquées dans ce rapport : les structures à moins de "
+          f"{100 * tie:.0f} % l'une de l'autre sont déclarées ex æquo, et seul ce qui se retrouve "
+          "dans les deux campagnes est présenté comme une conclusion.\n")
+        w(f"`python3 scripts/make_results.py {results_dir} {prev_dir}` refait cette comparaison "
+          "depuis les mesures versionnées.\n")
+        limits_title = "## 8. Ce que ce rapport ne dit pas\n"
+    else:
+        limits_title = "## 7. Ce que ce rapport ne dit pas\n"
+
     # --- Limites ---
-    w("## 7. Ce que ce rapport ne dit pas\n")
-    w("- **Une seule machine, un seul run de campagne.** Les écarts de quelques pourcents entre "
-      "structures voisines ne sont pas significatifs ; seuls les ordres de grandeur le sont.\n"
+    w(limits_title)
+    w("- **Une seule machine.** Les écarts entre structures inférieurs au seuil d'ex æquo ne "
+      "sont pas significatifs ; seuls les ordres de grandeur le sont.\n"
       "- **Graphes synthétiques.** Les topologies sont choisies pour isoler des effets (localité, "
       "hubs, uniformité), pas pour imiter un graphe réel.\n"
       "- **Structures figées.** Rien n'est mesuré après construction : ni insertion, ni "

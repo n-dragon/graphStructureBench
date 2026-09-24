@@ -207,7 +207,10 @@ pas toujours celui obtenu : le rapport affiche le nombre réel.
 
 ---
 
-## 13. Sorties de campagne hors du dépôt, rapport retenu versionné
+## ~~13. Sorties de campagne hors du dépôt, rapport retenu versionné~~
+
+*Remplacée par la décision 20 : un rapport qui compare deux campagnes doit
+pouvoir être régénéré depuis le dépôt.*
 
 *2026-09-18 — proposé*
 
@@ -364,7 +367,8 @@ ont tranché :
   tient en cache (0,4 Mio), x3,89 à 13 Mio, x4,33 à 65 Mio.
 
 **Décision.** Le dépassement est du **parallélisme mémoire** et il est publié
-comme tel, avec le gradient qui l'établit. Un cœur ne peut avoir qu'une dizaine
+comme tel, avec le gradient qui l'établit. *Nuancée par la décision 20 : le
+gradient se reproduit, l'amplitude au-delà de x4 non.* Un cœur ne peut avoir qu'une dizaine
 de défauts de cache en vol ; une lecture d'adjacence aléatoire dans un index de
 65 Mio est limitée par cette latence et non par le calcul, si bien que quatre
 cœurs multiplient par quatre le nombre de requêtes mémoire en vol et que le
@@ -380,6 +384,52 @@ justifiées et ont amélioré la mesure ; la troisième explication n'était pas
 correction à faire mais un phénomène à comprendre. Il fallait mesurer le
 gradient pour distinguer les deux, et non choisir entre « c'est du bruit » et
 « c'est impossible ».
+
+---
+
+## 20. Une conclusion doit survivre à une seconde campagne
+
+*2026-09-24 — demandé (relance du banc), conclusions proposées*
+
+**Contexte.** La campagne a été rejouée à l'identique : même code de mesure
+(vérifié par `git diff`), même machine, deux jours plus tard. Confrontées point
+à point sur 2 412 mesures :
+
+- la **mémoire** se reproduit à 0,29 % près ;
+- le **débit** beaucoup moins : 80 % des points entre 0,91 et 1,24 fois leur
+  valeur précédente, et 23 % s'écartent de plus que leur propre dispersion
+  interne — celle-ci sous-estime donc la variance réelle ;
+- la **structure la plus rapide** d'un point donné n'est la même que dans 126
+  cas sur 288 ;
+- le **gain du parallélisme hors cache** passe de x4,46 à x4,06 : la
+  progression avec la taille de l'index se retrouve, le dépassement du nombre
+  de cœurs ne se retrouve pas nettement.
+
+**Décision.**
+
+- Le seuil d'ex æquo est **mesuré** : c'est la demi-largeur de la bande
+  q10–q90 des écarts entre campagnes (17 % ici). Le rapport relie par « ≈ »
+  les structures à moins de ce seuil de la meilleure, au lieu de désigner un
+  vainqueur.
+- Une affirmation n'est présentée comme conclusion que si elle se retrouve
+  dans les deux campagnes ; le générateur conditionne lui-même sa formulation
+  (par exemple, il n'écrit « au-delà du nombre de cœurs » que si les deux
+  campagnes le montrent).
+- Les CSV des campagnes retenues sont **versionnés** dans `campaigns/<date>/`,
+  pour que `RESULTS.md` se régénère depuis le dépôt et non depuis un conteneur
+  éphémère. Cela remplace la décision 13 ; le coût est d'environ 330 Ko par
+  campagne.
+
+**Conséquences.** Le rapport affirme moins et tient mieux. Le choix du CSR par
+défaut ne repose plus sur une vitesse supérieure, que la machine ne permet pas
+d'établir, mais sur le fait qu'il est le plus compact d'un groupe de tête
+ex æquo. En le rendant calculé, une affirmation jamais vérifiée est tombée :
+`adjmap` n'est pas « la plus lente » (médiane 6e sur 9, `edgelist` est
+derrière), elle est la plus lourde.
+
+**Leçon.** La décision 19 s'appuyait sur une seule campagne. Le gradient
+qu'elle décrivait était réel ; l'amplitude qu'elle mettait en avant ne l'était
+pas assez pour être publiée comme un fait.
 
 ---
 

@@ -179,9 +179,20 @@ toutes les mesures.
 | `cmd/gsbench` | ligne de commande, balayage du produit cartésien |
 | `go test ./bench -bench ... -cpu=1,2,4` | benchmarks Go standards, axe threads via `-cpu` |
 | `scripts/run-bench.sh` | campagne reproductible en quatre volets |
-| `results/*.txt`, `*.md`, `*.csv` | sorties brutes (régénérables, non versionnées) |
-| `RESULTS.md` | rapport retenu, versionné |
+| `results/*.txt`, `*.md`, `*.csv` | sorties de la dernière campagne lancée (non versionnées) |
+| `campaigns/<date>/*.csv` | mesures brutes des campagnes retenues, versionnées |
+| `scripts/make_results.py` | engendre `RESULTS.md` depuis une campagne, ou deux pour la reproductibilité |
+| `RESULTS.md` | rapport retenu, versionné, entièrement engendré |
 | `README.md` | mode d'emploi et lecture des résultats |
+
+### Reproductibilité
+
+Une conclusion n'est retenue que si elle se retrouve dans **deux campagnes
+indépendantes**. L'écart entre campagnes fixe le seuil d'ex æquo : deux
+structures plus proches que la demi-largeur de la bande q10–q90 des écarts
+entre campagnes sont déclarées non départageables. La dispersion interne à une
+campagne ne suffit pas : des répétitions rapprochées partagent l'état de la
+machine et la sous-estiment.
 
 ## 9. Hors périmètre
 

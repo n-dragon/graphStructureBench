@@ -1,0 +1,27 @@
+goos: linux
+goarch: amd64
+pkg: github.com/n-dragon/graphstructurebench/bench
+cpu: Intel(R) Xeon(R) Processor @ 2.10GHz
+BenchmarkCallbackOverhead/adjmap/callback-4         	 1575560	       404.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCallbackOverhead/adjmap/batch-4            	 2203052	       246.5 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCallbackOverhead/adjmap/slice-4            	 5376151	       108.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCallbackOverhead/adjlist/callback-4        	 1785514	       306.6 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCallbackOverhead/adjlist/batch-4           	 4628114	       142.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCallbackOverhead/adjlist/slice-4           	11475805	        54.78 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCallbackOverhead/adjlist-exact/callback-4  	 2460574	       228.3 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCallbackOverhead/adjlist-exact/batch-4     	 4799604	       107.2 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCallbackOverhead/adjlist-exact/slice-4     	11050316	        53.33 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCallbackOverhead/csr/callback-4            	 3275504	       177.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCallbackOverhead/csr/batch-4               	 6314022	        90.69 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCallbackOverhead/csr/slice-4               	15819706	        39.80 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCallbackOverhead/csr-slices/callback-4     	 2612169	       221.6 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCallbackOverhead/csr-slices/batch-4        	 5878935	        99.84 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCallbackOverhead/csr-slices/slice-4        	12130287	        53.95 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCallbackOverhead/edgelist/callback-4       	  941118	       578.7 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCallbackOverhead/edgelist/batch-4          	 1000000	       595.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCallbackOverhead/varint-csr/callback-4     	 1607499	       364.3 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCallbackOverhead/varint-csr/batch-4        	 1637160	       337.5 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCallbackOverhead/hybrid/callback-4         	 3089394	       212.4 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCallbackOverhead/hybrid/batch-4            	 5222770	        96.55 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/n-dragon/graphstructurebench/bench	19.546s

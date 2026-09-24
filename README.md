@@ -22,34 +22,45 @@ d'existence d'arête).
 
 ### Ce que la campagne donne
 
-Sur un graphe uniforme d'un million de sommets et seize millions d'arêtes
-(4 cœurs) : le CSR indexe en 4,25 octets par arête, le CSR compressé en varint
-descend à 3,57 (2,39 sur un graphe en loi de puissance), la liste d'adjacence
-par `map` monte à 10,92 — soit 2,6 fois le CSR, pour le débit le plus faible.
+Deux campagnes identiques, à deux jours d'intervalle, sur 4 cœurs. Ne sont
+retenus ici que les résultats qui se retrouvent dans les deux.
 
-Deux résultats moins attendus :
+- **Mémoire**, sur un graphe uniforme d'un million de sommets et seize millions
+  d'arêtes : 4,25 octets par arête pour le CSR, 3,57 pour le CSR compressé en
+  varint (2,39 sur un graphe en loi de puissance), 10,92 pour la liste
+  d'adjacence par `map`. Reproductible à 0,3 % près.
+- **Vitesse** : les structures à tableaux contigus (CSR et ses variantes, listes
+  d'adjacence) forment un groupe de tête que la machine ne permet pas de
+  départager — deux campagnes identiques s'écartent de 17 % sur un même point.
+  Le CSR en est le choix par défaut parce qu'il y est le plus compact.
+- **Lire l'adjacence par bloc** plutôt que par callback : environ +35 à +40 %
+  sur un BFS complet à degré 16, mais −9 à −13 % à degré 4, où la recopie du
+  bloc n'est pas amortie.
+- **Le parallélisme rend davantage hors cache qu'en cache**, mais un gain
+  supérieur au nombre de cœurs, mesuré une fois, ne s'est pas reproduit
+  nettement.
 
-- **lire l'adjacence par bloc plutôt que par callback** vaut +40 % de débit sur
-  un BFS complet à degré 16, mais **−9 %** à degré 4 : la recopie du bloc n'est
-  amortie que s'il y a assez de voisins ;
-- **le parallélisme rapporte plus que le nombre de cœurs** quand l'index sort
-  du cache (x4,3 sur 4 cœurs à 65 Mio d'index, contre x3,6 à 0,4 Mio) : la
-  lecture aléatoire est limitée par la latence mémoire, et les threads
-  multiplient les défauts de cache en vol.
-
-Le détail, les tableaux par topologie et les réserves de lecture sont dans
-[RESULTS.md](RESULTS.md).
+Le détail, les tableaux par topologie et l'analyse de reproductibilité sont
+dans [RESULTS.md](RESULTS.md).
 
 ## Démarrage
 
 ```bash
 go test ./...                 # vérifie que les 9 structures répondent la même chose
-./scripts/run-bench.sh        # campagne complète, ~25 min, résultats dans results/
+./scripts/run-bench.sh        # campagne complète, ~75 min, résultats dans results/
 go run ./cmd/gsbench -list    # catalogue des structures et des charges
 
 # un point de mesure précis
 go run ./cmd/gsbench -kinds rmat -nodes 1000000 -threads 1,2,4 \
   -queries 200000,2000000 -workloads hasedge
+```
+
+Pour archiver une campagne et régénérer le rapport en la comparant à la
+précédente :
+
+```bash
+mkdir -p campaigns/AAAA-MM-JJ && cp results/*.csv results/callback-overhead.txt campaigns/AAAA-MM-JJ/
+python3 scripts/make_results.py campaigns/AAAA-MM-JJ campaigns/<précédente> > RESULTS.md
 ```
 
 Benchmarks Go standards également disponibles, l'axe threads passant par `-cpu` :
@@ -156,6 +167,7 @@ gen/        générateurs de graphes (er, rmat, grid)
 traverse/   BFS, DFS, lecture d'adjacence — écrits contre l'interface
 bench/      charges de travail, exécution concurrente, mesures, rapports
 cmd/gsbench/ ligne de commande et balayage du produit cartésien
-scripts/    campagne reproductible
-results/    sorties de la campagne (texte, markdown, CSV brut)
+scripts/    campagne reproductible et génération du rapport
+campaigns/  mesures brutes des campagnes retenues, une par date
+results/    sorties de la dernière campagne lancée (non versionnées)
 ```
